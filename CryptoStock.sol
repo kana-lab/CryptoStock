@@ -6,31 +6,31 @@ interface ICryptoStock {
     function register() external;
 
     // 成売り、"買い板が足りる限り"amountを上限として成売りする
-    function sellTaker(address stockName, uint amount) external;
+    function sellTaker(address stockName, uint32 amount) external;
 
     // 指値の売り
-    function sellMaker(address stockName, uint amount, uint price) external;
+    function sellMaker(address stockName, uint32 amount, uint price) external;
 
     // 成買い, "送られてきたETHと売り板が足りる限り"amountを上限として成買いする
-    function buyTaker(address stockName, uint amount) external payable;
+    function buyTaker(address stockName, uint32 amount) external payable;
 
     // 指値の買い, 約定していない段階でもETHを送る必要がある
-    function buyMaker(address stockName, uint amount, uint price) external payable;
+    function buyMaker(address stockName, uint32 amount, uint price) external payable;
 
     function getPrice(address stockName) external view returns (uint);
 
     // 取引の成立時にemitされるイベント, 現在の価格を知るために用いる事ができる
-    event Transfer(address stockName, address from, address to, uint amount, uint price);
+    event Transfer(address stockName, address from, address to, uint32 amount, uint price);
 
     // 指値時にemitされるイベント, successは成否(2:買い成功, 1:売り成功, 0:失敗)
-    event NewMaker(address stockName, address indexed from, uint amount, uint price, uint success);
+    event NewMaker(address stockName, address indexed from, uint32 amount, uint price, uint success);
 }
 
 // 暗号株式の発行数は企業毎に10000000で固定
 // なんと暗号株式では価格決定までスマコン上で行われる
 contract CryptoStock is ICryptoStock {
     struct Maker {
-        address maker;
+        address payable maker;
         uint price;  // in Wei
         uint32 amount;
         // 二分木の子ノードを表す
@@ -66,7 +66,7 @@ contract CryptoStock is ICryptoStock {
         return stocks[stockName].currentPrice;
     }
 
-    function sellMaker(address stockName, uint amount, uint price) external {
+    function sellMaker(address stockName, uint32 amount, uint price) external {
         // stockNameという銘柄が存在するかは確認する必要がない (お金の移動がないのでどうでも良い)
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
         require(amount > 0, "amount must not be 0");
@@ -99,17 +99,17 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _sellTree.push(Maker(0, 1, 0, 0, 0));
+            _sellTree.push(Maker(address(0), 1, 0, 0, 0));
             // これ以外と重要だったりする
             _sellTree.push(Maker(msg.sender, price, amount, 0, 0));
             _stock.sellTreeRoot = 1;
         }
 
         // eventのemit
-        NewMaker(stockName, msg.sender, amount, price, 1);
+        emit NewMaker(stockName, msg.sender, amount, price, 1);
     }
 
-    function buyTaker(address stockName, uint amount) external payable {
+    function buyTaker(address stockName, uint32 amount) external payable {
         Stock storage _stock = stocks[stockName];
         // stockNameなる銘柄が存在しているか？
         require(_stock.currentPrice > 0, "no such stock");
@@ -134,9 +134,9 @@ contract CryptoStock is ICryptoStock {
         address _stockName,
         Maker[] storage _sellTree,
         uint _root,
-        uint _amount,
+        uint32 _amount,
         uint _eth
-    ) internal returns (uint newChild, uint restAmount, uint restEth) {
+    ) internal returns (uint newChild, uint32 restAmount, uint restEth) {
         if (_root == 0) {
             return (0, _amount, _eth);
         }
@@ -162,7 +162,7 @@ contract CryptoStock is ICryptoStock {
         uint _totalEth = _node.price * _node.amount;
         if (_totalEth <= _eth && _node.amount <= _amount) {
             _node.maker.transfer(_totalEth);
-            Transfer(_stockName, msg.sender, _node.maker, _node.amount, _node.price);
+            emit Transfer(_stockName, msg.sender, _node.maker, _node.amount, _node.price);
 
             return _buy(
                 _stockName, _sellTree, _node.right, _amount - _node.amount, _eth - _totalEth
@@ -176,20 +176,21 @@ contract CryptoStock is ICryptoStock {
             _sellTree[_root].left = _newChild;
         }
         // 買える量を算出
-        uint _buyableAmount = _eth / _node.price;
+        uint32 _buyableAmount = uint32(_eth / _node.price);
+        // FIXME: 丸め方がへた
         if (_amount < _buyableAmount) {
             _buyableAmount = _amount;
         }
         _totalEth = _node.price * _buyableAmount;
 
         _node.maker.transfer(_totalEth);
-        Transfer(_stockName, msg.sender, _node.maker, _buyableAmount, _node.price);
+        emit Transfer(_stockName, msg.sender, _node.maker, _buyableAmount, _node.price);
 
         _sellTree[_root].amount -= _buyableAmount;
         return (_root, _amount - _buyableAmount, _eth - _totalEth);
     }
 
-    function buyMaker(address stockName, uint amount, uint price) external payable {
+    function buyMaker(address stockName, uint32 amount, uint price) external payable {
         require(amount * price == msg.value, "please send exact ETH");
         require(amount > 0, "amount must not be 0");
 
@@ -205,7 +206,7 @@ contract CryptoStock is ICryptoStock {
         // 二分探索！インサートしよう
         if (_node > 0) {
             while (true) {
-                Maker memory _parent = _buyTree[node];
+                Maker memory _parent = _buyTree[_node];
                 uint _node_backup = _node;
                 _node = (price <= _parent.price) ? _parent.right : _parent.left;
 
@@ -221,16 +222,16 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _buyTree.push(Maker(0, 1, 0, 0, 0));
+            _buyTree.push(Maker(address(0), 1, 0, 0, 0));
             _buyTree.push(Maker(msg.sender, price, amount, 0, 0));
             _stock.buyTreeRoot = 1;
         }
 
         // eventのemit
-        NewMaker(stockName, msg.sender, amount, price, 2);
+        emit NewMaker(stockName, msg.sender, amount, price, 2);
     }
 
-    function sellTaker(address stockName, uint amount) external {
+    function sellTaker(address stockName, uint32 amount) external {
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
         require(amount > 0, "amount must not be 0");
 
@@ -255,9 +256,9 @@ contract CryptoStock is ICryptoStock {
         address _stockName,
         Maker[] storage _buyTree,
         uint _root,
-        uint _amount,
+        uint32 _amount,
         uint _sumEth
-    ) internal returns (uint newChild, uint restAmount, uint totalEth) {
+    ) internal returns (uint newChild, uint32 restAmount, uint totalEth) {
         if (_root == 0) {
             return (0, _amount, _sumEth);
         }
@@ -282,7 +283,7 @@ contract CryptoStock is ICryptoStock {
         // _rootノードを食いつぶすか？
         if (_node.amount <= _amount) {
             _sumEth += _node.price * _node.amount;
-            Transfer(_stockName, _node.maker, msg.sender, _node.amount, _node.price);
+            emit Transfer(_stockName, _node.maker, msg.sender, _node.amount, _node.price);
 
             return _sell(
                 _stockName, _buyTree, _node.right, _amount - _node.amount, _sumEth
@@ -297,7 +298,7 @@ contract CryptoStock is ICryptoStock {
         }
 
         _sumEth += _node.price * _amount;
-        Transfer(_stockName, _node.maker, msg.sender, _amount, _node.price);
+        emit Transfer(_stockName, _node.maker, msg.sender, _amount, _node.price);
 
         _buyTree[_root].amount -= _amount;
         return (_root, 0, _sumEth);
