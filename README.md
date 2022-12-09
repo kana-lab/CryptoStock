@@ -1,5 +1,6 @@
 # CryptoStock
-![alt text](https://github.com/kana-lab/CryptoStock/blob/master/image/logo.png?raw=true)
+![alt text](../master/image/logo.png?raw=true)<br>
+
 CryptoStockは2022.12.3-12.10に行われた[ブロックチェーンハッカソン](https://todaiweb3.com/hackathon/)
 においてグループHが作成したものの一部であり、「暗号株式」を発行・売買するスマートコントラクトです。
 
@@ -22,7 +23,7 @@ CryptoStockは2022.12.3-12.10に行われた[ブロックチェーンハッカ�
 CryptoStockでは、どの企業の株を売買するかという事を、その企業のウォレットアドレスを用いて指定します。
 企業のウォレットアドレスはスマートコントラクトからは得られないので、別途入手する必要があります。
 
-![alt text](https://github.com/kana-lab/CryptoStock/blob/master/image/logo.png?raw=true)
+![alt text](../master/image/system.png?raw=true)
 ### 販売者登録
 
 暗号株式を販売するには、`register`という関数を呼び出します。
