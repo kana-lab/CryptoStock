@@ -58,8 +58,11 @@ contract CryptoStock is ICryptoStock {
     // 将来的にはOwnerだけがregisterを呼べるようにし、上場審査を実現したい
     function register() external {
         // currentPrice != 0とすることで、stocks[msg.sender]が空でない事を示す
-        stocks[msg.sender].currentPrice = 1;
+        Stock storage _stock = stocks[msg.sender];
+        _stock.currentPrice = 1;
         balances[msg.sender][msg.sender] = 10000000;
+        _stock.sellTree.push(Maker(address(0), 1, 0, 0, 0));
+        _stock.buyTree.push(Maker(address(0), 1, 0, 0, 0));
     }
 
     function getPrice(address stockName) external view returns (uint) {
@@ -67,11 +70,11 @@ contract CryptoStock is ICryptoStock {
     }
 
     function sellMaker(address stockName, uint32 amount, uint price) external {
-        // stockNameという銘柄が存在するかは確認する必要がない (お金の移動がないのでどうでも良い)
+        Stock storage _stock = stocks[stockName];
+        require(_stock.currentPrice > 0, "no such stock");
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
         require(amount > 0, "amount must not be 0");
 
-        Stock storage _stock = stocks[stockName];
         require(_stock.buyTree[_stock.buyTreeRoot].price < price, "invalid price");
         // 約定していなくともバランスを減らしてしまおう
         // 株を持っていないのに指値を連発されたら困るので。
@@ -99,8 +102,6 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _sellTree.push(Maker(address(0), 1, 0, 0, 0));
-            // これ以外と重要だったりする
             _sellTree.push(Maker(msg.sender, price, amount, 0, 0));
             _stock.sellTreeRoot = 1;
         }
@@ -222,7 +223,6 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _buyTree.push(Maker(address(0), 1, 0, 0, 0));
             _buyTree.push(Maker(msg.sender, price, amount, 0, 0));
             _stock.buyTreeRoot = 1;
         }
