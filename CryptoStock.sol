@@ -1,4 +1,4 @@
-pragma solidity ^0.5.4;
+pragma solidity >=0.5.4 <0.9.0;
 
 // 現在のところ、一度行った売買リクエストはキャンセルできない仕様
 interface ICryptoStock {
@@ -56,20 +56,20 @@ contract CryptoStock is ICryptoStock {
     mapping(address => mapping(address => uint)) balances;
 
     // 将来的にはOwnerだけがregisterを呼べるようにし、上場審査を実現したい
-    function register() external {
+    function register() external override {
         // currentPrice != 0とすることで、stocks[msg.sender]が空でない事を示す
         Stock storage _stock = stocks[msg.sender];
         _stock.currentPrice = 1;
         balances[msg.sender][msg.sender] = 10000000;
-        _stock.sellTree.push(Maker(address(0), 1, 0, 0, 0));
-        _stock.buyTree.push(Maker(address(0), 1, 0, 0, 0));
+        _stock.sellTree.push(Maker(payable(address(0)), 1, 0, 0, 0));
+        _stock.buyTree.push(Maker(payable(address(0)), 1, 0, 0, 0));
     }
 
-    function getPrice(address stockName) external view returns (uint) {
+    function getPrice(address stockName) external view override returns (uint) {
         return stocks[stockName].currentPrice;
     }
 
-    function sellMaker(address stockName, uint32 amount, uint price) external {
+    function sellMaker(address stockName, uint32 amount, uint price) external override {
         Stock storage _stock = stocks[stockName];
         require(_stock.currentPrice > 0, "no such stock");
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
@@ -80,9 +80,9 @@ contract CryptoStock is ICryptoStock {
         // 株を持っていないのに指値を連発されたら困るので。
         // バランスの復帰は指値のキャンセル機能を実装した時で良し
         balances[stockName][msg.sender] -= amount;
-
         uint _node = _stock.sellTreeRoot;
         Maker[] storage _sellTree = _stock.sellTree;
+        address payable _sender = payable(msg.sender);
         // 二分探索！インサートしよう
         if (_node > 0) {
             while (true) {
@@ -91,7 +91,7 @@ contract CryptoStock is ICryptoStock {
                 _node = (price > _parent.price) ? _parent.right : _parent.left;
 
                 if (_node == 0) {
-                    _sellTree.push(Maker(msg.sender, price, amount, 0, 0));
+                    _sellTree.push(Maker(_sender, price, amount, 0, 0));
                     uint idx = _sellTree.length - 1;
                     if (price > _parent.price) {
                         _sellTree[_node_backup].right = idx;
@@ -102,7 +102,7 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _sellTree.push(Maker(msg.sender, price, amount, 0, 0));
+            _sellTree.push(Maker(_sender, price, amount, 0, 0));
             _stock.sellTreeRoot = 1;
         }
 
@@ -110,11 +110,11 @@ contract CryptoStock is ICryptoStock {
         emit NewMaker(stockName, msg.sender, amount, price, 1);
     }
 
-    function buyTaker(address stockName, uint32 amount) external payable {
+    function buyTaker(address stockName, uint32 amount) external payable override{
         Stock storage _stock = stocks[stockName];
         // stockNameなる銘柄が存在しているか？
         require(_stock.currentPrice > 0, "no such stock");
-
+        address payable _sender = payable(msg.sender);
         Maker[] storage _sellTree = _stock.sellTree;
         uint _newRoot;
         uint _restAmount;
@@ -126,7 +126,7 @@ contract CryptoStock is ICryptoStock {
         if (_stock.sellTreeRoot != _newRoot) {
             _stock.sellTreeRoot = _newRoot;
         }
-        msg.sender.transfer(_restEth);
+        _sender.transfer(_restEth);
         balances[stockName][msg.sender] += amount - _restAmount;
         _stock.currentPrice = _sellTree[_newRoot].price;
     }
@@ -191,7 +191,7 @@ contract CryptoStock is ICryptoStock {
         return (_root, _amount - _buyableAmount, _eth - _totalEth);
     }
 
-    function buyMaker(address stockName, uint32 amount, uint price) external payable {
+    function buyMaker(address stockName, uint32 amount, uint price) external payable override{
         require(amount * price == msg.value, "please send exact ETH");
         require(amount > 0, "amount must not be 0");
 
@@ -204,6 +204,7 @@ contract CryptoStock is ICryptoStock {
 
         uint _node = _stock.buyTreeRoot;
         Maker[] storage _buyTree = _stock.buyTree;
+        address payable _sender = payable(msg.sender);
         // 二分探索！インサートしよう
         if (_node > 0) {
             while (true) {
@@ -212,7 +213,7 @@ contract CryptoStock is ICryptoStock {
                 _node = (price <= _parent.price) ? _parent.right : _parent.left;
 
                 if (_node == 0) {
-                    _buyTree.push(Maker(msg.sender, price, amount, 0, 0));
+                    _buyTree.push(Maker(_sender, price, amount, 0, 0));
                     uint idx = _buyTree.length - 1;
                     if (price <= _parent.price) {
                         _buyTree[_node_backup].right = idx;
@@ -223,7 +224,7 @@ contract CryptoStock is ICryptoStock {
                 }
             }
         } else {
-            _buyTree.push(Maker(msg.sender, price, amount, 0, 0));
+            _buyTree.push(Maker(_sender, price, amount, 0, 0));
             _stock.buyTreeRoot = 1;
         }
 
@@ -231,9 +232,10 @@ contract CryptoStock is ICryptoStock {
         emit NewMaker(stockName, msg.sender, amount, price, 2);
     }
 
-    function sellTaker(address stockName, uint32 amount) external {
+    function sellTaker(address stockName, uint32 amount) external override{
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
         require(amount > 0, "amount must not be 0");
+        address payable _sender = payable(msg.sender);
 
         Stock storage _stock = stocks[stockName];
         Maker[] storage _buyTree = _stock.buyTree;
@@ -247,7 +249,7 @@ contract CryptoStock is ICryptoStock {
         if (_stock.buyTreeRoot != _newRoot) {
             _stock.buyTreeRoot = _newRoot;
         }
-        msg.sender.transfer(_totalEth);
+        _sender.transfer(_totalEth);
         balances[stockName][msg.sender] -= amount - _restAmount;
         _stock.currentPrice = _buyTree[_newRoot].price;
     }
