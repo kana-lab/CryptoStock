@@ -53,7 +53,7 @@ contract CryptoStock is ICryptoStock {
     // 各人がどれくらい暗号株式を持っているか？
     // 暗号株式銘柄 => 各人の辞書
     // 暗号株式銘柄は発行企業のウォレットアドレスで表す
-    mapping(address => mapping(address => uint)) balances;
+    mapping(address => mapping(address => uint)) public balances;
 
     // 将来的にはOwnerだけがregisterを呼べるようにし、上場審査を実現したい
     function register() external override {
@@ -110,7 +110,7 @@ contract CryptoStock is ICryptoStock {
         emit NewMaker(stockName, msg.sender, amount, price, 1);
     }
 
-    function buyTaker(address stockName, uint32 amount) external payable override{
+    function buyTaker(address stockName, uint32 amount) external payable override {
         Stock storage _stock = stocks[stockName];
         // stockNameなる銘柄が存在しているか？
         require(_stock.currentPrice > 0, "no such stock");
@@ -178,7 +178,6 @@ contract CryptoStock is ICryptoStock {
         }
         // 買える量を算出
         uint32 _buyableAmount = uint32(_eth / _node.price);
-        // FIXME: 丸め方がへた
         if (_amount < _buyableAmount) {
             _buyableAmount = _amount;
         }
@@ -191,7 +190,7 @@ contract CryptoStock is ICryptoStock {
         return (_root, _amount - _buyableAmount, _eth - _totalEth);
     }
 
-    function buyMaker(address stockName, uint32 amount, uint price) external payable override{
+    function buyMaker(address stockName, uint32 amount, uint price) external payable override {
         require(amount * price == msg.value, "please send exact ETH");
         require(amount > 0, "amount must not be 0");
 
@@ -232,7 +231,7 @@ contract CryptoStock is ICryptoStock {
         emit NewMaker(stockName, msg.sender, amount, price, 2);
     }
 
-    function sellTaker(address stockName, uint32 amount) external override{
+    function sellTaker(address stockName, uint32 amount) external override {
         require(balances[stockName][msg.sender] >= amount, "not enough stock");
         require(amount > 0, "amount must not be 0");
         address payable _sender = payable(msg.sender);
